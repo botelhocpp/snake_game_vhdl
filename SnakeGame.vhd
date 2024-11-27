@@ -30,6 +30,13 @@ PORT (
 END ENTITY;
  
 ARCHITECTURE RTL OF SnakeGame IS
+  TYPE t_GameState IS (
+    s_IDLE,
+    s_RUNNING
+  );
+  
+  SIGNAL r_State : t_GameState := s_IDLE;
+
   TYPE t_SnakePart IS RECORD
     X : INTEGER RANGE 0 TO c_GAME_WIDTH - 1;
     Y : INTEGER RANGE 0 TO c_GAME_HEIGHT - 1;
@@ -51,17 +58,61 @@ ARCHITECTURE RTL OF SnakeGame IS
   SIGNAL r_Pressed_Left : STD_LOGIC := '0';
   SIGNAL r_Pressed_Right : STD_LOGIC := '0';
 
-  SIGNAL r_X_Pos : INTEGER RANGE 0 TO c_GAME_WIDTH - 1 := c_GAME_WIDTH/2 - 1;
-  SIGNAL r_Y_Pos : INTEGER RANGE 0 TO c_GAME_HEIGHT - 1 := c_GAME_HEIGHT/2 - 1;
+  ALIAS a_Head_X_Pos IS r_Snake(0).X;
+  ALIAS a_Head_Y_Pos IS r_Snake(0).Y;
 
   SIGNAL w_One_Key_Pressed : STD_LOGIC := '0';
   
   SIGNAL w_H_Pos : INTEGER RANGE 0 TO c_H_MAX := 0;
   SIGNAL w_V_Pos : INTEGER RANGE 0 TO c_V_MAX := 0;
+  
+  SIGNAL w_Current_Random_X : INTEGER RANGE 0 TO c_GAME_WIDTH - 1 := 0;
+  SIGNAL w_Current_Random_Y : INTEGER RANGE 0 TO c_GAME_HEIGHT - 1 := 0;
+
+  SIGNAL r_Food_X : INTEGER RANGE 0 TO c_GAME_WIDTH - 1 := 0;
+  SIGNAL r_Food_Y : INTEGER RANGE 0 TO c_GAME_WIDTH - 1 := 0;
+
+  SIGNAL w_Game_Active : STD_LOGIC := '0';
 BEGIN 
+  w_Game_Active <= '1' WHEN (r_State = s_RUNNING) ELSE '0'; 
   w_One_Key_Pressed <= i_Pressed_Up XOR i_Pressed_Down XOR i_Pressed_Left XOR i_Pressed_Right;
   w_H_Pos <= i_H_Pos/c_GAME_SCALE;
   w_V_Pos <= i_V_Pos/c_GAME_SCALE;
+
+  p_GAME_STATE_MACHINE:
+  PROCESS(i_Clk)
+  BEGIN
+    IF(RISING_EDGE(i_Clk)) THEN
+      CASE r_State IS
+        WHEN s_IDLE =>
+          IF(w_One_Key_Pressed = '1') THEN
+            r_Food_X <= w_Current_Random_X;
+            r_Food_Y <= w_Current_Random_Y;
+            r_State <= s_RUNNING;
+          END IF;
+          r_Snake_Size <= c_MIN_SNAKE_SIZE;
+
+        WHEN s_RUNNING =>
+          IF(
+            (r_Pressed_Up = '1' AND a_Head_Y_Pos = 0) OR 
+            (r_Pressed_Down = '1' AND a_Head_Y_Pos = c_GAME_HEIGHT - 1) OR
+            (r_Pressed_Left = '1' AND a_Head_X_Pos = 0) OR
+            (r_Pressed_Right = '1' AND a_Head_X_Pos = c_GAME_WIDTH - 1)
+          ) THEN
+            r_State <= s_IDLE;
+          ELSE
+
+            IF(a_Head_X_Pos = r_Food_X AND a_Head_Y_Pos = r_Food_Y) THEN
+              r_Snake_Size <= r_Snake_Size + 1;
+
+              r_Food_X <= w_Current_Random_X;
+              r_Food_Y <= w_Current_Random_Y;
+            END IF;
+
+          END IF;
+      END CASE;
+    END IF;
+  END PROCESS;
 
   p_SETUP_DIRECTION:
   PROCESS(i_Clk)
@@ -76,46 +127,83 @@ BEGIN
     END IF;
   END PROCESS p_SETUP_DIRECTION;
 
-  p_UPDATE_POSITION:
+  p_UPDATE_SNAKE_POSITION:
   PROCESS(i_Clk)
     VARIABLE v_Counter : INTEGER RANGE 0 TO c_REFRESH_RATE := 0;
   BEGIN
     IF(RISING_EDGE(i_Clk)) THEN
-      v_Counter := v_Counter + 1;
-      IF(v_Counter = c_REFRESH_RATE) THEN
-        v_Counter := 0;
-        IF(r_Pressed_Up = '1' AND r_Y_Pos > 0) THEN
-          r_Y_Pos <= r_Y_Pos - 1;
-        ELSIF(r_Pressed_Down = '1' AND r_Y_Pos < c_GAME_HEIGHT - 1) THEN
-          r_Y_Pos <= r_Y_Pos + 1;
-        ELSIF(r_Pressed_Left = '1' AND r_X_Pos > 0) THEN
-          r_X_Pos <= r_X_Pos - 1;
-        ELSIF(r_Pressed_Right = '1' AND r_X_Pos < c_GAME_WIDTH - 1) THEN
-          r_X_Pos <= r_X_Pos + 1;
+      CASE r_State IS
+        WHEN s_IDLE =>
+          r_Snake <= (OTHERS => (c_GAME_WIDTH/2 - 1, c_GAME_HEIGHT/2 - 1));
+
+        WHEN s_RUNNING =>
+          v_Counter := v_Counter + 1;
+          IF(v_Counter = c_REFRESH_RATE) THEN
+            v_Counter := 0;
+            IF(r_Pressed_Up = '1' AND a_Head_Y_Pos > 0) THEN
+              a_Head_Y_Pos <= a_Head_Y_Pos - 1;
+            ELSIF(r_Pressed_Down = '1' AND a_Head_Y_Pos < c_GAME_HEIGHT - 1) THEN
+              a_Head_Y_Pos <= a_Head_Y_Pos + 1;
+            ELSIF(r_Pressed_Left = '1' AND a_Head_X_Pos > 0) THEN
+              a_Head_X_Pos <= a_Head_X_Pos - 1;
+            ELSIF(r_Pressed_Right = '1' AND a_Head_X_Pos < c_GAME_WIDTH - 1) THEN
+              a_Head_X_Pos <= a_Head_X_Pos + 1;
+            END IF;
+    
+            FOR i IN 1 TO c_MAX_SNAKE_SIZE - 1 LOOP
+              r_Snake(i).X <= r_Snake(i - 1).X;
+              r_Snake(i).Y <= r_Snake(i - 1).Y;
+            END LOOP;
+    
+          END IF;
+      END CASE;
+    END IF;
+  END PROCESS p_UPDATE_SNAKE_POSITION;
+
+  p_RANDOM_NUMBER_GENERATOR:
+  PROCESS(i_Clk)
+    VARIABLE v_Random_X : UNSIGNED(10 DOWNTO 0) := (OTHERS => '0');
+    VARIABLE v_Random_Y : UNSIGNED(10 DOWNTO 0) := (OTHERS => '0');
+    VARIABLE v_Random_Modifier : INTEGER RANGE 0 TO 100;
+  BEGIN
+    IF(RISING_EDGE(i_Clk)) THEN
+      IF(w_One_Key_Pressed = '1') THEN
+        IF(r_Pressed_Up = '1') THEN
+          v_Random_Modifier := 11;
+        ELSIF(r_Pressed_Down = '1') THEN
+          v_Random_Modifier := 22;
+        ELSIF(r_Pressed_Left = '1') THEN
+          v_Random_Modifier := 33;
+        ELSIF(r_Pressed_Right = '1') THEN
+          v_Random_Modifier := 44;
+        ELSE
+          v_Random_Modifier := 0;
         END IF;
 
-        r_Snake(0).X <= r_X_Pos;
-        r_Snake(0).Y <= r_Y_Pos;
-        FOR i IN 1 TO c_MAX_SNAKE_SIZE - 1 LOOP
-          r_Snake(i).X <= r_Snake(i - 1).X;
-          r_Snake(i).Y <= r_Snake(i - 1).Y;
-        END LOOP;
-
+        v_Random_X := v_Random_X + TO_UNSIGNED(i_H_Pos, 11) + TO_UNSIGNED(v_Random_Modifier, 11);
+        v_Random_Y := v_Random_Y + TO_UNSIGNED(i_V_Pos, 11) + TO_UNSIGNED(v_Random_Modifier, 11);
       END IF;
-    END IF;
-  END PROCESS p_UPDATE_POSITION;
 
-  p_DRAW_SNAKE:
+      w_Current_Random_X <= TO_INTEGER(v_Random_X) MOD c_GAME_WIDTH;
+      w_Current_Random_Y <= TO_INTEGER(v_Random_Y) MOD c_GAME_HEIGHT;
+    END IF;
+  END PROCESS p_RANDOM_NUMBER_GENERATOR;
+
+  p_DRAW_GAME:
   PROCESS(i_Clk)
     VARIABLE v_Render : STD_LOGIC := '0';
   BEGIN
     IF(RISING_EDGE(i_Clk)) THEN
-    v_Render := '0';
-    FOR i IN 0 TO c_MAX_SNAKE_SIZE - 1 LOOP
-      IF(i < r_Snake_Size AND w_H_Pos = r_Snake(i).X AND w_V_Pos = r_Snake(i).Y) THEN
+      v_Render := '0';
+      FOR i IN 0 TO c_MAX_SNAKE_SIZE - 1 LOOP
+        IF(i < r_Snake_Size AND w_H_Pos = r_Snake(i).X AND w_V_Pos = r_Snake(i).Y) THEN
+          v_Render := '1';
+        END IF;
+      END LOOP;
+
+      IF(w_Game_Active = '1' AND r_Food_X = w_H_Pos AND r_Food_Y = w_V_Pos) THEN
         v_Render := '1';
       END IF;
-    END LOOP;
     
       IF(v_Render = '1') THEN
         o_Channel_R <= (OTHERS => '1');
@@ -128,7 +216,7 @@ BEGIN
       END IF;
     
     END IF;
-  END PROCESS p_DRAW_SNAKE;
+  END PROCESS p_DRAW_GAME;
 
   p_SYNC_PULSES:
   PROCESS(i_Clk)
