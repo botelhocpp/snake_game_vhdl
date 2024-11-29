@@ -129,8 +129,12 @@ BEGIN
   PROCESS(i_Clk)
   BEGIN
     IF(RISING_EDGE(i_Clk)) THEN
-
-      IF(
+      IF(r_State = s_IDLE) THEN
+        r_Pressed_Up <= '0';
+        r_Pressed_Down <= '0';
+        r_Pressed_Left <= '0';
+        r_Pressed_Right <= '0';
+      ELSIF(
         (w_One_Key_Pressed = '1') AND
         NOT (r_Pressed_Up = '1' AND i_Pressed_Down = '1') AND
         NOT (r_Pressed_Down = '1' AND i_Pressed_Up = '1') AND
@@ -217,7 +221,11 @@ BEGIN
       
       -- Render snake?
       FOR i IN 0 TO c_MAX_SNAKE_SIZE - 1 LOOP
-        IF(i < r_Snake_Size AND w_H_Pos = r_Snake(i).X AND w_V_Pos = r_Snake(i).Y) THEN
+        IF(
+          (i < r_Snake_Size AND w_H_Pos = r_Snake(i).X AND w_V_Pos = r_Snake(i).Y) AND
+          (i_H_Pos MOD c_GAME_SCALE /= 0) AND (i_H_Pos MOD c_GAME_SCALE /= c_GAME_SCALE - 1) AND
+          (i_V_Pos MOD c_GAME_SCALE /= 0) AND (i_V_Pos MOD c_GAME_SCALE /= c_GAME_SCALE - 1)
+        ) THEN
           v_Render := '1';
         END IF;
       END LOOP;
@@ -229,10 +237,15 @@ BEGIN
 
       -- Render game limits?
       IF(
-        (w_H_Pos = c_GAME_LIMIT_LEFT_LINE) OR
+        (w_V_Pos >= c_GAME_LIMIT_UPPER_LINE AND 
+        w_V_Pos <= c_GAME_LIMIT_LOWER_LINE AND 
+        w_H_Pos >= c_GAME_LIMIT_LEFT_LINE AND 
+        w_H_Pos <= c_GAME_LIMIT_RIGHT_LINE) AND
+        
+        ((w_H_Pos = c_GAME_LIMIT_LEFT_LINE) OR
         (w_H_Pos = c_GAME_LIMIT_RIGHT_LINE) OR
         (w_V_Pos = c_GAME_LIMIT_UPPER_LINE) OR
-        (w_V_Pos = c_GAME_LIMIT_LOWER_LINE)
+        (w_V_Pos = c_GAME_LIMIT_LOWER_LINE))
       ) THEN
         v_Render := '1';
       END IF;
