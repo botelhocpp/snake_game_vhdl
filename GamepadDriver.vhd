@@ -46,13 +46,13 @@ BEGIN
     
     p_GENERATE_SAMPLING_CLK:
     PROCESS(i_Clk)
-        CONSTANT c_SAMPLING_PERIOD : INTEGER := 1250000; -- for 10ms
+        CONSTANT c_SAMPLING_PERIOD : INTEGER := 400000; -- for 10ms
         VARIABLE v_Sampling_Counter : INTEGER RANGE 0 TO c_SAMPLING_PERIOD/2 := 0;
     BEGIN
         IF(RISING_EDGE(i_Clk)) THEN
-            IF(v_Sampling_Counter < c_SAMPLING_PERIOD/2) THEN
-                v_Sampling_Counter := v_Sampling_Counter + 1;
-            ELSIF(v_Sampling_Counter = c_SAMPLING_PERIOD/2) THEN
+            v_Sampling_Counter := v_Sampling_Counter + 1;
+            
+            IF(v_Sampling_Counter = c_SAMPLING_PERIOD/2) THEN
                 v_Sampling_Counter := 0;
                 r_Sampling_Clk <= NOT r_Sampling_Clk;
                 

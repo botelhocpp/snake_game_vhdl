@@ -58,7 +58,7 @@ BEGIN
 
     e_GAMEPAD_DRIVER: ENTITY WORK.GamepadDriver
     PORT MAP (
-        i_Clk                => i_Clk,
+        i_Clk                => w_Pixel_Clk,
         i_Gamepad_Up         => i_Gamepad_Up,
         i_Gamepad_Down       => i_Gamepad_Down,
         i_Gamepad_Left_A     => i_Gamepad_Left_A,
