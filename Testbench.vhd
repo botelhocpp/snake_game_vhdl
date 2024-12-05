@@ -16,12 +16,19 @@ ENTITY Testbench IS
     i_Gamepad_Right_B : IN STD_LOGIC;
     o_Gamepad_Action_Com : OUT STD_LOGIC;
     o_Gamepad_Arrows_Com : OUT STD_LOGIC;
-     
+
     -- HDMI
     o_Hdmi_Data_N : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
     o_Hdmi_Data_P : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
     o_Hdmi_Clk_N : OUT STD_LOGIC;
-    o_Hdmi_Clk_P : OUT STD_LOGIC
+    o_Hdmi_Clk_P : OUT STD_LOGIC;
+     
+    -- VGA
+    o_VGA_R : OUT STD_LOGIC_VECTOR(4 DOWNTO 0);
+    o_VGA_G : OUT STD_LOGIC_VECTOR(5 DOWNTO 0);
+    o_VGA_B : OUT STD_LOGIC_VECTOR(4 DOWNTO 0);
+    o_VGA_H_Sync : OUT STD_LOGIC;
+    o_VGA_V_Sync : OUT STD_LOGIC
     );
 END ENTITY;
  
@@ -121,5 +128,11 @@ BEGIN
         o_Hdmi_Clk_N    => o_Hdmi_Clk_N,
         o_Hdmi_Clk_P    => o_Hdmi_Clk_P
     );
+    
+    o_VGA_H_Sync <= w_H_Sync_Aligned;
+    o_VGA_V_Sync <= w_V_Sync_Aligned;
+    o_VGA_R <= w_Channel_R(4 DOWNTO 0);
+    o_VGA_G <= w_Channel_G(5 DOWNTO 0);
+    o_VGA_B <= w_Channel_B(4 DOWNTO 0);
    
 END ARCHITECTURE;

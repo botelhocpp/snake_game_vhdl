@@ -34,8 +34,14 @@ ARCHITECTURE RTL OF SnakeGame IS
     s_IDLE,
     s_RUNNING
   );
-  
   SIGNAL r_State : t_GameState := s_IDLE;
+
+  TYPE t_Level IS (
+    s_EASY,
+    s_NORMAL,
+    s_HARD
+  );
+  SIGNAL r_Current_Level : t_Level := s_EASY;
 
   TYPE t_SnakePart IS RECORD
     X : INTEGER RANGE 0 TO c_GAME_WIDTH - 1;
@@ -73,11 +79,28 @@ ARCHITECTURE RTL OF SnakeGame IS
   SIGNAL r_Food_Y : INTEGER RANGE 0 TO c_GAME_WIDTH - 1 := 0;
 
   SIGNAL w_Game_Active : STD_LOGIC := '0';
+
+  SIGNAL w_Snake_Speed : INTEGER RANGE 0 TO c_MAX_SNAKE_SPEED := 0; 
+
+  SIGNAL r_Pressed_B : STD_LOGIC := '0';
 BEGIN 
+  WITH r_Current_Level SELECT 
+    w_Snake_Speed <=  c_SNAKE_SPEED_EASY    WHEN s_EASY,
+                      c_SNAKE_SPEED_NORMAL  WHEN s_NORMAL,
+                      c_SNAKE_SPEED_HARD    WHEN s_HARD;
+
   w_One_Key_Pressed <= i_Pressed_Up OR i_Pressed_Down OR i_Pressed_Left OR i_Pressed_Right;
   w_Game_Active <= '1' WHEN (r_State = s_RUNNING) ELSE '0'; 
   w_H_Pos <= i_H_Pos/c_GAME_SCALE;
   w_V_Pos <= i_V_Pos/c_GAME_SCALE;
+
+  e_SAMPLE_B_BUTTON: ENTITY WORK.SamplingRegister
+  PORT MAP (
+      i_Signal  => i_Pressed_B,
+      i_Clk     => i_Clk,
+      i_Number_Cycles => c_PIXEL_CLK_FREQ,
+      o_Output  => r_Pressed_B
+  );
 
   p_GAME_STATE_MACHINE:
   PROCESS(i_Clk)
@@ -89,6 +112,15 @@ BEGIN
             r_Food_X <= w_Current_Random_X;
             r_Food_Y <= w_Current_Random_Y;
             r_State <= s_RUNNING;
+          ELSIF(r_Pressed_B = '1') THEN
+            CASE r_Current_Level IS
+              WHEN s_EASY =>
+                r_Current_Level <= s_NORMAL;
+              WHEN s_NORMAL =>
+                r_Current_Level <= s_HARD;
+              WHEN s_HARD =>
+                r_Current_Level <= s_EASY;
+            END CASE;
           END IF;
           r_Snake_Size <= c_MIN_SNAKE_SIZE;
 
@@ -151,7 +183,7 @@ BEGIN
 
   p_UPDATE_SNAKE_POSITION:
   PROCESS(i_Clk)
-    VARIABLE v_Counter : INTEGER RANGE 0 TO c_REFRESH_RATE := 0;
+    VARIABLE v_Counter : INTEGER RANGE 0 TO c_MAX_SNAKE_SPEED := 0;
   BEGIN
     IF(RISING_EDGE(i_Clk)) THEN
       CASE r_State IS
@@ -161,7 +193,7 @@ BEGIN
   
         WHEN s_RUNNING =>
           v_Counter := v_Counter + 1;
-          IF(v_Counter = c_REFRESH_RATE) THEN
+          IF(v_Counter >= w_Snake_Speed) THEN
             v_Counter := 0;
   
             FOR i IN c_MAX_SNAKE_SIZE - 1 DOWNTO 1 LOOP
@@ -214,10 +246,10 @@ BEGIN
 
   p_DRAW_GAME:
   PROCESS(i_Clk)
-    VARIABLE v_Render : STD_LOGIC := '0';
+    VARIABLE v_Render_Snake : STD_LOGIC := '0';
   BEGIN
     IF(RISING_EDGE(i_Clk)) THEN
-      v_Render := '0';
+      v_Render_Snake := '0';
       
       -- Render snake?
       FOR i IN 0 TO c_MAX_SNAKE_SIZE - 1 LOOP
@@ -226,34 +258,54 @@ BEGIN
           (i_H_Pos MOD c_GAME_SCALE /= 0) AND (i_H_Pos MOD c_GAME_SCALE /= c_GAME_SCALE - 1) AND
           (i_V_Pos MOD c_GAME_SCALE /= 0) AND (i_V_Pos MOD c_GAME_SCALE /= c_GAME_SCALE - 1)
         ) THEN
-          v_Render := '1';
+          v_Render_Snake := '1';
         END IF;
       END LOOP;
-
-      -- Render food?
-      IF(w_Game_Active = '1' AND r_Food_X = w_H_Pos AND r_Food_Y = w_V_Pos) THEN
-        v_Render := '1';
-      END IF;
-
-      -- Render game limits?
-      IF(
-        (w_V_Pos >= c_GAME_LIMIT_UPPER_LINE AND 
-        w_V_Pos <= c_GAME_LIMIT_LOWER_LINE AND 
-        w_H_Pos >= c_GAME_LIMIT_LEFT_LINE AND 
-        w_H_Pos <= c_GAME_LIMIT_RIGHT_LINE) AND
-        
-        ((w_H_Pos = c_GAME_LIMIT_LEFT_LINE) OR
-        (w_H_Pos = c_GAME_LIMIT_RIGHT_LINE) OR
-        (w_V_Pos = c_GAME_LIMIT_UPPER_LINE) OR
-        (w_V_Pos = c_GAME_LIMIT_LOWER_LINE))
-      ) THEN
-        v_Render := '1';
-      END IF;
     
-      IF(v_Render = '1') THEN
+      -- Render snake
+      IF(v_Render_Snake = '1') THEN
+        CASE r_Current_Level IS
+          WHEN s_EASY =>
+            o_Channel_R <= (OTHERS => '0');
+            o_Channel_G <= (OTHERS => '1');
+            o_Channel_B <= (OTHERS => '1');
+          WHEN s_NORMAL =>
+            o_Channel_R <= (OTHERS => '0');
+            o_Channel_G <= (OTHERS => '1');
+            o_Channel_B <= (OTHERS => '0');
+          WHEN s_HARD =>
+            o_Channel_R <= (OTHERS => '1');
+            o_Channel_G <= (OTHERS => '1');
+            o_Channel_B <= (OTHERS => '0');
+        END CASE;
+
+      -- Render limits
+      ELSIF(
+        (i_V_Pos >= c_GAME_SCALE*c_GAME_LIMIT_UPPER_LINE + c_GAME_SCALE/2 AND 
+        i_V_Pos < c_GAME_SCALE*c_GAME_LIMIT_LOWER_LINE + c_GAME_SCALE/2 AND 
+        i_H_Pos >= c_GAME_SCALE*c_GAME_LIMIT_LEFT_LINE + c_GAME_SCALE/2 AND 
+        i_H_Pos < c_GAME_SCALE*c_GAME_LIMIT_RIGHT_LINE + c_GAME_SCALE/2) AND
+        
+        ((i_H_Pos >= c_GAME_SCALE*c_GAME_LIMIT_LEFT_LINE + c_GAME_SCALE/2 AND i_H_Pos < c_GAME_SCALE*c_GAME_LIMIT_LEFT_LINE + c_GAME_SCALE) OR
+        (i_H_Pos >= c_GAME_SCALE*c_GAME_LIMIT_RIGHT_LINE AND i_H_Pos < c_GAME_SCALE*c_GAME_LIMIT_RIGHT_LINE + c_GAME_SCALE/2) OR
+        (i_V_Pos >= c_GAME_SCALE*c_GAME_LIMIT_UPPER_LINE + c_GAME_SCALE/2 AND i_V_Pos < c_GAME_SCALE*c_GAME_LIMIT_UPPER_LINE + c_GAME_SCALE) OR
+        (i_V_Pos >= c_GAME_SCALE*c_GAME_LIMIT_LOWER_LINE AND i_V_Pos < c_GAME_SCALE*c_GAME_LIMIT_LOWER_LINE + c_GAME_SCALE/2))
+      ) THEN
         o_Channel_R <= (OTHERS => '1');
         o_Channel_G <= (OTHERS => '1');
         o_Channel_B <= (OTHERS => '1');
+
+      -- Render color
+      ELSIF(
+        w_Game_Active = '1' AND 
+        r_Food_X = w_H_Pos AND 
+        r_Food_Y = w_V_Pos
+      ) THEN
+        o_Channel_R <= (OTHERS => '1');
+        o_Channel_G <= (OTHERS => '0');
+        o_Channel_B <= (OTHERS => '0');
+
+      -- Render background
       ELSE
         o_Channel_R <= (OTHERS => '0');
         o_Channel_G <= (OTHERS => '0');
